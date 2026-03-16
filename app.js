@@ -9,7 +9,7 @@
 // ╔══════════════════════════════════════════════════════════╗
 // ║  PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL BELOW        ║
 // ╚══════════════════════════════════════════════════════════╝
-const API_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwB_YNqJm64CXBeylOD0-ZKhnzJKrXa1sRWME2UoHqPwUb4MgbYkROA1Jh51iPdA4Y/exec';
 
 // ─── REAL DATA FROM EXCEL FILES (Offline Fallback) ──────────
 
