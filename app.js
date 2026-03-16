@@ -130,6 +130,12 @@ async function fetchData() {
 }
 
 function render() {
+  // Initialize filtered arrays with full data
+  filteredPreIssues = preIssues.slice();
+  filteredIntents = intents.slice();
+  filteredSyncs = syncs.slice();
+  filteredStores = stores.slice();
+  
   updateKPIs();
   updateChartsData();
   populateTables();
@@ -354,12 +360,238 @@ function populateAgents() {
     </div>`).join('');
 }
 
+// ─── Date Parsing Helper ────────────────────────────────────
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return dateStr;
+  dateStr = String(dateStr).trim();
+  
+  // Try dd/MM/yyyy format 
+  var parts = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (parts) return new Date(parts[3], parts[2] - 1, parts[1]);
+  
+  // Try yyyy-MM-dd (ISO)
+  parts = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (parts) return new Date(parts[1], parts[2] - 1, parts[3]);
+  
+  // Fallback
+  var d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// ─── Global Filter State ────────────────────────────────────
+let filteredPreIssues = [], filteredIntents = [], filteredSyncs = [], filteredStores = [];
+
+function applyFilters() {
+  const q = (document.getElementById('searchInput').value || '').toLowerCase();
+  const fromVal = document.getElementById('dateFrom').value;
+  const toVal = document.getElementById('dateTo').value;
+  const fromDate = fromVal ? new Date(fromVal) : null;
+  const toDate = toVal ? new Date(toVal + 'T23:59:59') : null;
+  
+  // Filter Pre-Issues by search + date
+  filteredPreIssues = preIssues.filter(t => {
+    if (q) {
+      const text = Object.values(t).join(' ').toLowerCase();
+      if (!text.includes(q)) return false;
+    }
+    if (fromDate || toDate) {
+      const d = parseDate(t.Date);
+      if (!d) return false;
+      if (fromDate && d < fromDate) return false;
+      if (toDate && d > toDate) return false;
+    }
+    return true;
+  });
+  
+  // Filter Intents by search + date
+  filteredIntents = intents.filter(i => {
+    if (q) {
+      const text = Object.values(i).join(' ').toLowerCase();
+      if (!text.includes(q)) return false;
+    }
+    if (fromDate || toDate) {
+      const d = parseDate(i.Timestamp);
+      if (!d) return false;
+      if (fromDate && d < fromDate) return false;
+      if (toDate && d > toDate) return false;
+    }
+    return true;
+  });
+  
+  // Filter Syncs by search (no date field)
+  filteredSyncs = syncs.filter(s => {
+    if (q) {
+      const text = Object.values(s).join(' ').toLowerCase();
+      if (!text.includes(q)) return false;
+    }
+    return true;
+  });
+  
+  // Filter Stores by search (no date field)
+  filteredStores = stores.filter(s => {
+    if (q) {
+      const text = Object.values(s).join(' ').toLowerCase();
+      if (!text.includes(q)) return false;
+    }
+    return true;
+  });
+  
+  // Re-render everything with filtered data
+  renderFiltered();
+}
+
+function renderFiltered() {
+  updateKPIsFiltered();
+  updateChartsFiltered();
+  populateTablesFiltered();
+  populateAgentsFiltered();
+  populateRecentActivity();
+}
+
+function updateKPIsFiltered() {
+  const pending = filteredPreIssues.filter(t => t.Status === 'Pending').length;
+  const approved = filteredPreIssues.filter(t => t.Status === 'Approved').length;
+  const raised = filteredPreIssues.filter(t => t['Ticket Raised'] === 'Yes').length;
+  const synced = filteredSyncs.filter(s => s['Sync Status'] === 'Yes').length;
+  const syncFail = filteredSyncs.filter(s => s['Sync Status'] === 'No').length;
+  
+  animateCounter('kpiTotal', filteredPreIssues.length);
+  animateCounter('kpiPending', pending);
+  animateCounter('kpiApproved', approved);
+  animateCounter('kpiIntent', filteredIntents.length);
+  animateCounter('kpiTicketsRaised', raised);
+  animateCounter('kpiSynced', synced);
+  animateCounter('kpiStores', filteredStores.length);
+  animateCounter('kpiSyncFail', syncFail);
+  
+  document.getElementById('navBadgePreIssue').textContent = filteredPreIssues.length;
+  document.getElementById('navBadgeIntent').textContent = filteredIntents.length;
+}
+
+function updateChartsFiltered() {
+  const pending = filteredPreIssues.filter(t => t.Status === 'Pending').length;
+  const approved = filteredPreIssues.filter(t => t.Status === 'Approved').length;
+  const sentDev = filteredPreIssues.filter(t => t.Status === 'Sent to Dev').length;
+  const resolved = filteredPreIssues.filter(t => t.Status === 'Resolved').length;
+  const onHold = filteredPreIssues.filter(t => t.Status === 'On Hold').length;
+  charts.status.data.datasets[0].data = [pending,approved,sentDev,resolved,onHold];
+  charts.status.update();
+
+  const missing = filteredIntents.filter(i => i.Problem === 'Missing Intent').length;
+  const incorrect = filteredIntents.filter(i => (i.Problem||'').toLowerCase().includes('incorrect')).length;
+  charts.intent.data.datasets[0].data = [missing,incorrect];
+  charts.intent.update();
+
+  const synced = filteredSyncs.filter(s => s['Sync Status'] === 'Yes').length;
+  const failed = filteredSyncs.filter(s => s['Sync Status'] === 'No').length;
+  charts.sync.data.datasets[0].data = [synced,failed];
+  charts.sync.update();
+
+  const ac = {};
+  filteredPreIssues.forEach(t => { const a = t['Agent No.']; if (a) ac[a] = (ac[a]||0)+1; });
+  charts.agent.data.labels = Object.keys(ac);
+  charts.agent.data.datasets[0].data = Object.values(ac);
+  charts.agent.data.datasets[0].backgroundColor = Object.keys(ac).map((_,i) => ['rgba(99,102,241,0.7)','rgba(6,182,212,0.7)'][i%2]);
+  charts.agent.data.datasets[0].borderColor = Object.keys(ac).map((_,i) => ['#6366f1','#06b6d4'][i%2]);
+  charts.agent.update();
+}
+
+function populateTablesFiltered() {
+  // Dashboard summary
+  document.getElementById('dashTicketsBody').innerHTML = filteredPreIssues.length ? filteredPreIssues.map(t => `<tr>
+    <td style="color:var(--text-accent);font-weight:600">${t['S.No']||''}</td>
+    <td>${t['Agent No.']||'—'}</td>
+    <td style="max-width:250px;white-space:normal">${t['Issue Title']||''}</td>
+    <td>${badge(t.Status)}</td>
+    <td>${t['Assigned To']||'—'}</td>
+    <td>${t['Ticket Raised']==='Yes'?'✅':'❌'}</td>
+    <td>${t.Date||''}</td>
+  </tr>`).join('') : '<tr><td colspan="7" class="no-results">No matching issues found</td></tr>';
+
+  // Full Pre-Issue tab
+  document.getElementById('preIssuesBody').innerHTML = filteredPreIssues.length ? filteredPreIssues.map(t => `<tr>
+    <td>${t['S.No']||''}</td><td>${t['Agent No.']||'—'}</td>
+    <td style="max-width:200px;white-space:normal">${t['Issue Title']||''}</td>
+    <td style="max-width:300px;white-space:normal">${t.Description||''}</td>
+    <td>${t['Image/PDF Link']?`<a href="${t['Image/PDF Link']}" target="_blank" style="color:var(--accent-primary)">📎 View</a>`:'—'}</td>
+    <td>${badge(t.Status)}</td>
+    <td style="max-width:200px;white-space:normal">${t.Notes||'—'}</td>
+    <td>${t['Assigned To']||'—'}</td>
+    <td>${t['Ticket Raised']==='Yes'?'✅':'❌'}</td>
+    <td>${t.Date||''}</td>
+  </tr>`).join('') : '<tr><td colspan="10" class="no-results">No matching tickets found</td></tr>';
+
+  // Intent Problems
+  document.getElementById('intentBody').innerHTML = filteredIntents.length ? filteredIntents.map(i => `<tr>
+    <td>${i.Timestamp||''}</td><td style="color:var(--text-accent);font-weight:600">${i.ID||''}</td>
+    <td>${badge(i.Problem)}</td>
+    <td style="max-width:250px;white-space:normal">${i.Description||'—'}</td>
+    <td>${i.Image?`<a href="${i.Image}" target="_blank" style="color:var(--accent-primary)">📸 View</a>`:'—'}</td>
+    <td>${i.PDF?`<a href="${i.PDF}" target="_blank" style="color:var(--accent-primary)">📄 View</a>`:'—'}</td>
+    <td>${badge(i.Status)}</td>
+  </tr>`).join('') : '<tr><td colspan="7" class="no-results">No matching intent problems found</td></tr>';
+
+  // Sync Verification
+  document.getElementById('syncBody').innerHTML = filteredSyncs.length ? filteredSyncs.map(s => `<tr class="${s['Sync Status']==='No'?'row-danger':''}">
+    <td style="font-weight:${s['S.No']?'600':'400'}">${s['S.No']||''}</td><td>${s.BOC||''}</td><td>${s['Store Name']||''}</td>
+    <td><span class="data-group-tag ${s['Data Group']==='SERVICE_DETAIL_CLOSED'?'detail':'service'}">${s['Data Group']||''}</span></td>
+    <td style="text-align:right;font-weight:600;color:${s['Records Count']<0?'var(--color-red)':'inherit'}">${typeof s['Records Count']==='number'?s['Records Count'].toLocaleString():s['Records Count']}</td>
+    <td>${s['Sync Date']||''}</td>
+    <td>${badge(s['Sync Status'])}</td>
+  </tr>`).join('') : '<tr><td colspan="7" class="no-results">No matching sync records found</td></tr>';
+
+  // Store Template Check
+  document.getElementById('storeCheckBody').innerHTML = filteredStores.length ? filteredStores.map(s => `<tr>
+    <td>${s['BOC ID']||''}</td><td style="font-weight:${s['Dealer Name']?'600':'400'}">${s['Dealer Name']||''}</td><td>${s['Interaction Type']||''}</td>
+    <td>${s['Service Cost']==='Yes'?'✅':s['Service Cost']==='No'?'❌':'—'}</td>
+    <td>${s.Shuttle==='Yes'?'✅':s.Shuttle==='No'?'❌':'—'}</td>
+    <td>${s['Car Wash']==='Yes'?'✅':s['Car Wash']==='No'?'❌':'—'}</td>
+    <td>${s.Rental==='Yes'?'✅':s.Rental==='No'?'❌':'—'}</td>
+    <td>${s.Loaner==='Yes'?'✅':s.Loaner==='No'?'❌':'—'}</td>
+    <td>${s.Lyft==='Yes'?'✅':s.Lyft==='No'?'❌':'—'}</td>
+    <td style="max-width:200px;white-space:normal;color:${s.Notes?'var(--color-orange)':'inherit'}">${s.Notes||'—'}</td>
+  </tr>`).join('') : '<tr><td colspan="10" class="no-results">No matching stores found</td></tr>';
+}
+
+function populateAgentsFiltered() {
+  const colors = ['#6366f1','#8b5cf6','#ec4899','#ef4444','#f59e0b','#10b981','#06b6d4'];
+  const ac = {};
+  filteredPreIssues.forEach(t => { const a = t['Agent No.']; if (a) ac[a] = (ac[a]||0)+1; });
+  
+  document.getElementById('agentList').innerHTML = Object.entries(ac).sort((a,b)=>b[1]-a[1]).map(([name,count],i) => `
+    <div class="agent-item">
+      <div class="agent-avatar" style="background:${colors[i%colors.length]}">${name.replace('Agent ','A')}</div>
+      <div class="agent-info"><div class="agent-name">${name}</div><div class="agent-stats">${count} issues · ${filteredPreIssues.filter(t=>t['Agent No.']===name && t['Ticket Raised']==='Yes').length} tickets raised</div></div>
+      <div style="text-align:right"><div style="font-size:1.4rem;font-weight:700;color:var(--text-accent)">${count}</div><div style="font-size:0.65rem;color:var(--text-muted)">issues</div></div>
+    </div>`).join('') || '<div class="no-results">No agent activity found</div>';
+}
+
 // ─── Events ─────────────────────────────────────────────────
 function setupEvents() {
+  // Global search — debounced
+  let searchTimeout;
+  document.getElementById('searchInput').addEventListener('input', function() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(applyFilters, 250);
+  });
+
+  // Date range filter
+  document.getElementById('dateFrom').addEventListener('change', applyFilters);
+  document.getElementById('dateTo').addEventListener('change', applyFilters);
+  
+  // Clear date range
+  document.getElementById('dateClearBtn').addEventListener('click', () => {
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value = '';
+    applyFilters();
+  });
+
+  // Status filter on dashboard
   document.getElementById('statusFilter').addEventListener('change', function() {
     const val = this.value;
-    const filtered = val === 'all' ? preIssues : preIssues.filter(t => t.Status === val);
-    document.getElementById('dashTicketsBody').innerHTML = filtered.map(t => `<tr>
+    const filtered = val === 'all' ? filteredPreIssues : filteredPreIssues.filter(t => t.Status === val);
+    document.getElementById('dashTicketsBody').innerHTML = filtered.length ? filtered.map(t => `<tr>
       <td style="color:var(--text-accent);font-weight:600">${t['S.No']||''}</td>
       <td>${t['Agent No.']||'—'}</td>
       <td style="max-width:250px;white-space:normal">${t['Issue Title']||''}</td>
@@ -367,16 +599,10 @@ function setupEvents() {
       <td>${t['Assigned To']||'—'}</td>
       <td>${t['Ticket Raised']==='Yes'?'✅':'❌'}</td>
       <td>${t.Date||''}</td>
-    </tr>`).join('');
+    </tr>`).join('') : '<tr><td colspan="7" class="no-results">No matching issues</td></tr>';
   });
 
-  document.getElementById('searchInput').addEventListener('input', function() {
-    const q = this.value.toLowerCase();
-    document.querySelectorAll('#dashTicketsBody tr').forEach(row => {
-      row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
-    });
-  });
-
+  // Refresh button
   document.getElementById('refreshBtn').addEventListener('click', () => {
     if (API_URL !== 'PASTE_YOUR_WEB_APP_URL_HERE') fetchData();
     else { render(); document.getElementById('lastSync').textContent = 'Refreshed (Offline)'; }
