@@ -1103,3 +1103,179 @@ body {
   }
 }
 
+/* ─── SLA Badges ──────────────────────────────────────────── */
+.sla-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.sla-ok {
+  background: var(--color-green-soft);
+  color: var(--color-green);
+}
+
+.sla-warn {
+  background: var(--color-orange-soft);
+  color: var(--color-orange);
+}
+
+.sla-overdue {
+  background: var(--color-red-soft);
+  color: var(--color-red);
+  animation: pulse-sla 2s infinite;
+}
+
+.sla-unknown {
+  background: rgba(100, 116, 139, 0.12);
+  color: var(--text-muted);
+}
+
+@keyframes pulse-sla {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+  50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
+}
+
+/* ─── Chart Subtitle ──────────────────────────────────────── */
+.chart-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* ─── Enhanced Mobile Responsive ──────────────────────────── */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .main-content {
+    margin-left: 0;
+  }
+
+  .menu-toggle {
+    display: flex;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .kpi-card {
+    padding: 14px;
+  }
+
+  .kpi-value {
+    font-size: 1.4rem;
+  }
+
+  .kpi-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-card.chart-wide {
+    grid-column: span 1;
+  }
+
+  .chart-body {
+    height: 200px;
+  }
+
+  .search-box {
+    display: none;
+  }
+
+  .top-bar {
+    padding: 0 12px;
+  }
+
+  .tab-content {
+    padding: 12px;
+  }
+
+  .bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-list {
+    grid-template-columns: 1fr;
+  }
+
+  .table-wrapper {
+    font-size: 0.78rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 8px 10px;
+    font-size: 0.75rem;
+  }
+
+  .table-header {
+    padding: 12px 14px;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .tab-header-bar {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .page-title h2 {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .kpi-card {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .kpi-value {
+    font-size: 1.2rem;
+  }
+
+  .kpi-label {
+    font-size: 0.68rem;
+  }
+
+  .top-bar {
+    height: 52px;
+  }
+
+  .user-avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 0.7rem;
+  }
+
+  .btn-refresh {
+    width: 30px;
+    height: 30px;
+    font-size: 0.85rem;
+  }
+}
+
+

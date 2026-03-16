@@ -1,9 +1,7 @@
 /**
- * AI App 3.1 — Operations Dashboard (v4 Final)
- * Works OFFLINE with real data + LIVE with Google Sheets API
- * 
- * To connect live: paste your Google Apps Script Web App URL below.
- * Dashboard auto-refreshes every 60 seconds when connected.
+ * AI App 3.1 — Operations Dashboard (v5 Final)
+ * Features: Live API, Offline Fallback, Global Search, Date Range,
+ *           Trend Chart, SLA Tracking, Mobile Responsive
  */
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -42,17 +40,17 @@ const OFFLINE_DATA = {
   ],
   syncs: [
     {'S.No':1,BOC:'TX500','Store Name':'Group 1 Toyota Fort Bend','Data Group':'SERVICE_CLOSED','Records Count':10648,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
-    {'S.No':'',BOC:'',  'Store Name':'','Data Group':'SERVICE_DETAIL_CLOSED','Records Count':-1,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'No'},
+    {'S.No':'',BOC:'','Store Name':'','Data Group':'SERVICE_DETAIL_CLOSED','Records Count':-1,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'No'},
     {'S.No':2,BOC:'TX500','Store Name':'Group 1 Toyota SW Houston','Data Group':'SERVICE_CLOSED','Records Count':12746,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
-    {'S.No':'',BOC:'',  'Store Name':'','Data Group':'SERVICE_DETAIL_CLOSED','Records Count':-1,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'No'},
+    {'S.No':'',BOC:'','Store Name':'','Data Group':'SERVICE_DETAIL_CLOSED','Records Count':-1,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'No'},
     {'S.No':3,BOC:'TX500','Store Name':'Sterling McCall Honda','Data Group':'SERVICE_CLOSED','Records Count':5025,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
-    {'S.No':'',BOC:'',  'Store Name':'','Data Group':'SERVICE_DETAIL_CLOSED','Records Count':-1,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'No'},
+    {'S.No':'',BOC:'','Store Name':'','Data Group':'SERVICE_DETAIL_CLOSED','Records Count':-1,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'No'},
     {'S.No':4,BOC:'TX500','Store Name':'Group 1 Hyundai SW Houston','Data Group':'SERVICE_CLOSED','Records Count':3826,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
     {'S.No':5,BOC:'TX500','Store Name':'Group 1 Ford SW Houston','Data Group':'SERVICE_CLOSED','Records Count':2244,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
     {'S.No':6,BOC:'TX500','Store Name':'Group 1 Chevrolet Spring','Data Group':'SERVICE_CLOSED','Records Count':4545,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
     {'S.No':7,BOC:'TX500','Store Name':'Lexus Southwest Houston','Data Group':'SERVICE_CLOSED','Records Count':9894,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
     {'S.No':8,BOC:'TX500','Store Name':'Lexus Clear Lake','Data Group':'SERVICE_CLOSED','Records Count':5472,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
-    {'S.No':'',BOC:'',  'Store Name':'','Data Group':'SERVICE_DETAIL_CLOSED','Records Count':19215,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
+    {'S.No':'',BOC:'','Store Name':'','Data Group':'SERVICE_DETAIL_CLOSED','Records Count':19215,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
     {'S.No':9,BOC:'TX500','Store Name':'Sterling McCall Acura','Data Group':'SERVICE_CLOSED','Records Count':2040,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
     {'S.No':10,BOC:'TX500','Store Name':'Group 1 Nissan SW Houston','Data Group':'SERVICE_CLOSED','Records Count':4649,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
     {'S.No':11,BOC:'TX500','Store Name':'BMW of Houston Midtown','Data Group':'SERVICE_CLOSED','Records Count':5306,'Sync Date':'Dec 30 2025 - Feb 27 2026','Sync Status':'Yes'},
@@ -84,7 +82,39 @@ const OFFLINE_DATA = {
 
 // ─── State ──────────────────────────────────────────────────
 let preIssues = [], intents = [], syncs = [], stores = [];
+let filteredPreIssues = [], filteredIntents = [], filteredSyncs = [], filteredStores = [];
 let charts = {};
+
+// ─── Date Parsing Helper ────────────────────────────────────
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
+  dateStr = String(dateStr).trim();
+  // dd/MM/yyyy
+  var p = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (p) return new Date(p[3], p[2] - 1, p[1]);
+  // yyyy-MM-dd
+  p = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (p) return new Date(p[1], p[2] - 1, p[3]);
+  var d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// ─── SLA Helper ─────────────────────────────────────────────
+function getSLA(dateStr, status) {
+  const d = parseDate(dateStr);
+  if (!d) return '<span class="sla-badge sla-unknown">—</span>';
+  const now = new Date();
+  const days = Math.floor((now - d) / (1000 * 60 * 60 * 24));
+  
+  // Resolved/Approved items don't show overdue
+  if (status === 'Resolved' || status === 'Approved') {
+    return `<span class="sla-badge sla-ok">${days}d ✓</span>`;
+  }
+  if (days <= 2) return `<span class="sla-badge sla-ok">${days}d</span>`;
+  if (days <= 5) return `<span class="sla-badge sla-warn">${days}d</span>`;
+  return `<span class="sla-badge sla-overdue">${days}d ⚠</span>`;
+}
 
 // ─── Init ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -92,18 +122,21 @@ document.addEventListener('DOMContentLoaded', () => {
   initCharts();
   setupEvents();
   
-  if (API_URL !== 'PASTE_YOUR_WEB_APP_URL_HERE') {
+  if (API_URL && API_URL !== 'PASTE_YOUR_WEB_APP_URL_HERE') {
     fetchData();
   } else {
-    // Use offline data
-    preIssues = OFFLINE_DATA.preIssues;
-    intents = OFFLINE_DATA.intents;
-    syncs = OFFLINE_DATA.syncs;
-    stores = OFFLINE_DATA.stores;
-    render();
-    document.getElementById('lastSync').textContent = 'Offline Mode';
+    loadOffline();
   }
 });
+
+function loadOffline() {
+  preIssues = OFFLINE_DATA.preIssues;
+  intents = OFFLINE_DATA.intents;
+  syncs = OFFLINE_DATA.syncs;
+  stores = OFFLINE_DATA.stores;
+  render();
+  document.getElementById('lastSync').textContent = 'Offline Mode';
+}
 
 // ─── Fetch Live Data ────────────────────────────────────────
 async function fetchData() {
@@ -118,58 +151,99 @@ async function fetchData() {
     render();
     document.getElementById('lastSync').textContent = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) + ' ✅ Live';
   } catch(e) {
-    console.error(e);
-    // Fallback to offline
-    preIssues = OFFLINE_DATA.preIssues;
-    intents = OFFLINE_DATA.intents;
-    syncs = OFFLINE_DATA.syncs;
-    stores = OFFLINE_DATA.stores;
-    render();
+    console.error('API Error:', e);
+    loadOffline();
     document.getElementById('lastSync').innerHTML = '<span style="color:#f59e0b">⚠️ Offline Mode</span>';
   }
 }
 
+// ─── Render (initial full render) ───────────────────────────
 function render() {
-  // Initialize filtered arrays with full data
   filteredPreIssues = preIssues.slice();
   filteredIntents = intents.slice();
   filteredSyncs = syncs.slice();
   filteredStores = stores.slice();
-  
+  renderAll();
+}
+
+function renderAll() {
   updateKPIs();
-  updateChartsData();
+  updateCharts();
   populateTables();
   populateAgents();
   populateRecentActivity();
 }
 
+// ─── Global Filter ──────────────────────────────────────────
+function applyFilters() {
+  const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+  const fromEl = document.getElementById('dateFrom');
+  const toEl = document.getElementById('dateTo');
+  const fromDate = fromEl && fromEl.value ? new Date(fromEl.value) : null;
+  const toDate = toEl && toEl.value ? new Date(toEl.value + 'T23:59:59') : null;
+
+  filteredPreIssues = preIssues.filter(t => {
+    if (q && !Object.values(t).join(' ').toLowerCase().includes(q)) return false;
+    if (fromDate || toDate) {
+      const d = parseDate(t.Date);
+      if (!d) return false;
+      if (fromDate && d < fromDate) return false;
+      if (toDate && d > toDate) return false;
+    }
+    return true;
+  });
+
+  filteredIntents = intents.filter(i => {
+    if (q && !Object.values(i).join(' ').toLowerCase().includes(q)) return false;
+    if (fromDate || toDate) {
+      const d = parseDate(i.Timestamp);
+      if (!d) return false;
+      if (fromDate && d < fromDate) return false;
+      if (toDate && d > toDate) return false;
+    }
+    return true;
+  });
+
+  filteredSyncs = syncs.filter(s => {
+    if (q && !Object.values(s).join(' ').toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  filteredStores = stores.filter(s => {
+    if (q && !Object.values(s).join(' ').toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  renderAll();
+}
+
 // ─── KPIs ───────────────────────────────────────────────────
 function updateKPIs() {
-  const pending = preIssues.filter(t => t.Status === 'Pending').length;
-  const approved = preIssues.filter(t => t.Status === 'Approved').length;
-  const raised = preIssues.filter(t => t['Ticket Raised'] === 'Yes').length;
-  const synced = syncs.filter(s => s['Sync Status'] === 'Yes').length;
-  const syncFail = syncs.filter(s => s['Sync Status'] === 'No').length;
-  
-  animateCounter('kpiTotal', preIssues.length);
+  const pending = filteredPreIssues.filter(t => t.Status === 'Pending').length;
+  const approved = filteredPreIssues.filter(t => t.Status === 'Approved').length;
+  const raised = filteredPreIssues.filter(t => t['Ticket Raised'] === 'Yes').length;
+  const synced = filteredSyncs.filter(s => s['Sync Status'] === 'Yes').length;
+  const syncFail = filteredSyncs.filter(s => s['Sync Status'] === 'No').length;
+
+  animateCounter('kpiTotal', filteredPreIssues.length);
   animateCounter('kpiPending', pending);
   animateCounter('kpiApproved', approved);
-  animateCounter('kpiIntent', intents.length);
+  animateCounter('kpiIntent', filteredIntents.length);
   animateCounter('kpiTicketsRaised', raised);
   animateCounter('kpiSynced', synced);
-  animateCounter('kpiStores', stores.length);
+  animateCounter('kpiStores', filteredStores.length);
   animateCounter('kpiSyncFail', syncFail);
-  
-  document.getElementById('navBadgePreIssue').textContent = preIssues.length;
-  document.getElementById('navBadgeIntent').textContent = intents.length;
+
+  document.getElementById('navBadgePreIssue').textContent = filteredPreIssues.length;
+  document.getElementById('navBadgeIntent').textContent = filteredIntents.length;
 }
 
 function animateCounter(id, target) {
   const el = document.getElementById(id);
+  if (!el) return;
   const current = parseInt(el.textContent) || 0;
   if (current === target) { el.textContent = target; return; }
-  let start = 0;
-  const duration = 800;
+  const duration = 600;
   const startTime = performance.now();
   function step(now) {
     const progress = Math.min((now - startTime) / duration, 1);
@@ -207,6 +281,19 @@ function initCharts() {
   Chart.defaults.borderColor = 'rgba(30,41,59,0.5)';
   Chart.defaults.font.family = "'Inter', sans-serif";
 
+  // Trend Line Chart
+  charts.trend = new Chart(document.getElementById('trendLineChart'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Pre-Issues', data: [], borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#6366f1' },
+        { label: 'Intent Problems', data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#f59e0b' }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { padding: 15, usePointStyle: true, pointStyleWidth: 8, font: { size: 11 } } } }, scales: { x: { grid: { color: 'rgba(30,41,59,0.3)' }, ticks: { font: { size: 10 } } }, y: { beginAtZero: true, grid: { color: 'rgba(30,41,59,0.3)' }, ticks: { stepSize: 1, font: { size: 11 } } } }, animation: { duration: 1200, easing: 'easeOutQuart' } }
+  });
+
   charts.status = new Chart(document.getElementById('statusPieChart'), {type:'doughnut',data:{labels:['Pending','Approved','Sent to Dev','Resolved','On Hold'],datasets:[{data:[0,0,0,0,0],backgroundColor:['#f59e0b','#3b82f6','#8b5cf6','#10b981','#ef4444'],borderColor:'#1a1f35',borderWidth:3,hoverOffset:8}]},options:{cutout:'65%',responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{padding:14,usePointStyle:true,pointStyleWidth:8,font:{size:11}}}},animation:{duration:1200,easing:'easeOutQuart'}}});
   
   charts.intent = new Chart(document.getElementById('intentBarChart'), {type:'bar',data:{labels:['Missing Intent','Incorrect Intent'],datasets:[{data:[0,0],backgroundColor:['rgba(245,158,11,0.7)','rgba(239,68,68,0.7)'],borderColor:['#f59e0b','#ef4444'],borderWidth:1,borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{beginAtZero:true,grid:{color:'rgba(30,41,59,0.3)'},ticks:{stepSize:1,font:{size:11}}}},animation:{duration:1000,easing:'easeOutQuart'}}});
@@ -216,28 +303,54 @@ function initCharts() {
   charts.agent = new Chart(document.getElementById('agentIssuesChart'), {type:'bar',data:{labels:[],datasets:[{data:[],backgroundColor:['rgba(99,102,241,0.7)','rgba(6,182,212,0.7)'],borderColor:['#6366f1','#06b6d4'],borderWidth:1,borderRadius:6,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{stepSize:1,font:{size:11}},grid:{color:'rgba(30,41,59,0.3)'}},y:{grid:{display:false},ticks:{font:{size:12,weight:'600'}}}},animation:{duration:1000,easing:'easeOutQuart'}}});
 }
 
-function updateChartsData() {
-  const pending = preIssues.filter(t => t.Status === 'Pending').length;
-  const approved = preIssues.filter(t => t.Status === 'Approved').length;
-  const sentDev = preIssues.filter(t => t.Status === 'Sent to Dev').length;
-  const resolved = preIssues.filter(t => t.Status === 'Resolved').length;
-  const onHold = preIssues.filter(t => t.Status === 'On Hold').length;
-  
+function updateCharts() {
+  // Trend chart — group issues by date
+  const dateCounts = {};
+  const intentDateCounts = {};
+  filteredPreIssues.forEach(t => {
+    const d = parseDate(t.Date);
+    if (d) {
+      const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      dateCounts[key] = (dateCounts[key] || 0) + 1;
+    }
+  });
+  filteredIntents.forEach(i => {
+    const d = parseDate(i.Timestamp);
+    if (d) {
+      const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      intentDateCounts[key] = (intentDateCounts[key] || 0) + 1;
+    }
+  });
+  const allDates = [...new Set([...Object.keys(dateCounts), ...Object.keys(intentDateCounts)])];
+  charts.trend.data.labels = allDates;
+  charts.trend.data.datasets[0].data = allDates.map(d => dateCounts[d] || 0);
+  charts.trend.data.datasets[1].data = allDates.map(d => intentDateCounts[d] || 0);
+  charts.trend.update();
+
+  // Status pie
+  const pending = filteredPreIssues.filter(t => t.Status === 'Pending').length;
+  const approved = filteredPreIssues.filter(t => t.Status === 'Approved').length;
+  const sentDev = filteredPreIssues.filter(t => t.Status === 'Sent to Dev').length;
+  const resolved = filteredPreIssues.filter(t => t.Status === 'Resolved').length;
+  const onHold = filteredPreIssues.filter(t => t.Status === 'On Hold').length;
   charts.status.data.datasets[0].data = [pending,approved,sentDev,resolved,onHold];
   charts.status.update();
 
-  const missing = intents.filter(i => i.Problem === 'Missing Intent').length;
-  const incorrect = intents.filter(i => (i.Problem||'').toLowerCase().includes('incorrect')).length;
+  // Intent bar
+  const missing = filteredIntents.filter(i => i.Problem === 'Missing Intent').length;
+  const incorrect = filteredIntents.filter(i => (i.Problem||'').toLowerCase().includes('incorrect')).length;
   charts.intent.data.datasets[0].data = [missing,incorrect];
   charts.intent.update();
 
-  const synced = syncs.filter(s => s['Sync Status'] === 'Yes').length;
-  const failed = syncs.filter(s => s['Sync Status'] === 'No').length;
+  // Sync pie
+  const synced = filteredSyncs.filter(s => s['Sync Status'] === 'Yes').length;
+  const failed = filteredSyncs.filter(s => s['Sync Status'] === 'No').length;
   charts.sync.data.datasets[0].data = [synced,failed];
   charts.sync.update();
 
+  // Agent bar
   const ac = {};
-  preIssues.forEach(t => { const a = t['Agent No.']; if (a) ac[a] = (ac[a]||0)+1; });
+  filteredPreIssues.forEach(t => { const a = t['Agent No.']; if (a) ac[a] = (ac[a]||0)+1; });
   charts.agent.data.labels = Object.keys(ac);
   charts.agent.data.datasets[0].data = Object.values(ac);
   charts.agent.data.datasets[0].backgroundColor = Object.keys(ac).map((_,i) => ['rgba(99,102,241,0.7)','rgba(6,182,212,0.7)'][i%2]);
@@ -253,252 +366,7 @@ function badge(s) {
 
 // ─── Tables ─────────────────────────────────────────────────
 function populateTables() {
-  // Dashboard summary
-  document.getElementById('dashTicketsBody').innerHTML = preIssues.map(t => `<tr>
-    <td style="color:var(--text-accent);font-weight:600">${t['S.No']||''}</td>
-    <td>${t['Agent No.']||'—'}</td>
-    <td style="max-width:250px;white-space:normal">${t['Issue Title']||''}</td>
-    <td>${badge(t.Status)}</td>
-    <td>${t['Assigned To']||'—'}</td>
-    <td>${t['Ticket Raised']==='Yes'?'✅':'❌'}</td>
-    <td>${t.Date||''}</td>
-  </tr>`).join('');
-
-  // Full Pre-Issue tab
-  document.getElementById('preIssuesBody').innerHTML = preIssues.map(t => `<tr>
-    <td>${t['S.No']||''}</td><td>${t['Agent No.']||'—'}</td>
-    <td style="max-width:200px;white-space:normal">${t['Issue Title']||''}</td>
-    <td style="max-width:300px;white-space:normal">${t.Description||''}</td>
-    <td>${t['Image/PDF Link']?`<a href="${t['Image/PDF Link']}" target="_blank" style="color:var(--accent-primary)">📎 View</a>`:'—'}</td>
-    <td>${badge(t.Status)}</td>
-    <td style="max-width:200px;white-space:normal">${t.Notes||'—'}</td>
-    <td>${t['Assigned To']||'—'}</td>
-    <td>${t['Ticket Raised']==='Yes'?'✅':'❌'}</td>
-    <td>${t.Date||''}</td>
-  </tr>`).join('');
-
-  // Intent Problems
-  document.getElementById('intentBody').innerHTML = intents.map(i => `<tr>
-    <td>${i.Timestamp||''}</td><td style="color:var(--text-accent);font-weight:600">${i.ID||''}</td>
-    <td>${badge(i.Problem)}</td>
-    <td style="max-width:250px;white-space:normal">${i.Description||'—'}</td>
-    <td>${i.Image?`<a href="${i.Image}" target="_blank" style="color:var(--accent-primary)">📸 View</a>`:'—'}</td>
-    <td>${i.PDF?`<a href="${i.PDF}" target="_blank" style="color:var(--accent-primary)">📄 View</a>`:'—'}</td>
-    <td>${badge(i.Status)}</td>
-  </tr>`).join('');
-
-  // Sync Verification
-  document.getElementById('syncBody').innerHTML = syncs.map(s => `<tr class="${s['Sync Status']==='No'?'row-danger':''}">
-    <td style="font-weight:${s['S.No']?'600':'400'}">${s['S.No']||''}</td><td>${s.BOC||''}</td><td>${s['Store Name']||''}</td>
-    <td><span class="data-group-tag ${s['Data Group']==='SERVICE_DETAIL_CLOSED'?'detail':'service'}">${s['Data Group']||''}</span></td>
-    <td style="text-align:right;font-weight:600;color:${s['Records Count']<0?'var(--color-red)':'inherit'}">${typeof s['Records Count']==='number'?s['Records Count'].toLocaleString():s['Records Count']}</td>
-    <td>${s['Sync Date']||''}</td>
-    <td>${badge(s['Sync Status'])}</td>
-  </tr>`).join('');
-
-  // Store Template Check
-  document.getElementById('storeCheckBody').innerHTML = stores.map(s => `<tr>
-    <td>${s['BOC ID']||''}</td><td style="font-weight:${s['Dealer Name']?'600':'400'}">${s['Dealer Name']||''}</td><td>${s['Interaction Type']||''}</td>
-    <td>${s['Service Cost']==='Yes'?'✅':s['Service Cost']==='No'?'❌':'—'}</td>
-    <td>${s.Shuttle==='Yes'?'✅':s.Shuttle==='No'?'❌':'—'}</td>
-    <td>${s['Car Wash']==='Yes'?'✅':s['Car Wash']==='No'?'❌':'—'}</td>
-    <td>${s.Rental==='Yes'?'✅':s.Rental==='No'?'❌':'—'}</td>
-    <td>${s.Loaner==='Yes'?'✅':s.Loaner==='No'?'❌':'—'}</td>
-    <td>${s.Lyft==='Yes'?'✅':s.Lyft==='No'?'❌':'—'}</td>
-    <td style="max-width:200px;white-space:normal;color:${s.Notes?'var(--color-orange)':'inherit'}">${s.Notes||'—'}</td>
-  </tr>`).join('');
-}
-
-// ─── Recent Activity Feed ───────────────────────────────────
-function populateRecentActivity() {
-  const feed = document.getElementById('activityFeed');
-  if (!feed) return;
-  
-  // Combine all recent items, sorted by date
-  const activities = [];
-  preIssues.forEach(t => {
-    activities.push({
-      icon: t.Status === 'Approved' ? '✅' : '⏳',
-      text: `<strong>${t['Agent No.']||'System'}</strong> reported: ${t['Issue Title']}`,
-      status: t.Status,
-      date: t.Date || '',
-      type: 'issue'
-    });
-  });
-  intents.slice(0,3).forEach(i => {
-    activities.push({
-      icon: '💬',
-      text: `Intent problem <strong>#${i.ID}</strong>: ${i.Problem}`,
-      status: i.Status,
-      date: i.Timestamp ? i.Timestamp.split(' ')[0] : '',
-      type: 'intent'
-    });
-  });
-  
-  feed.innerHTML = activities.slice(0,8).map(a => `
-    <div class="activity-item">
-      <div class="activity-icon">${a.icon}</div>
-      <div class="activity-content">
-        <div class="activity-text">${a.text}</div>
-        <div class="activity-meta">${badge(a.status)} · ${a.date}</div>
-      </div>
-    </div>
-  `).join('');
-}
-
-// ─── Agent Activity ─────────────────────────────────────────
-function populateAgents() {
-  const colors = ['#6366f1','#8b5cf6','#ec4899','#ef4444','#f59e0b','#10b981','#06b6d4'];
-  const ac = {};
-  preIssues.forEach(t => { const a = t['Agent No.']; if (a) ac[a] = (ac[a]||0)+1; });
-  
-  document.getElementById('agentList').innerHTML = Object.entries(ac).sort((a,b)=>b[1]-a[1]).map(([name,count],i) => `
-    <div class="agent-item">
-      <div class="agent-avatar" style="background:${colors[i%colors.length]}">${name.replace('Agent ','A')}</div>
-      <div class="agent-info"><div class="agent-name">${name}</div><div class="agent-stats">${count} issues · ${preIssues.filter(t=>t['Agent No.']===name && t['Ticket Raised']==='Yes').length} tickets raised</div></div>
-      <div style="text-align:right"><div style="font-size:1.4rem;font-weight:700;color:var(--text-accent)">${count}</div><div style="font-size:0.65rem;color:var(--text-muted)">issues</div></div>
-    </div>`).join('');
-}
-
-// ─── Date Parsing Helper ────────────────────────────────────
-function parseDate(dateStr) {
-  if (!dateStr) return null;
-  if (dateStr instanceof Date) return dateStr;
-  dateStr = String(dateStr).trim();
-  
-  // Try dd/MM/yyyy format 
-  var parts = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (parts) return new Date(parts[3], parts[2] - 1, parts[1]);
-  
-  // Try yyyy-MM-dd (ISO)
-  parts = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (parts) return new Date(parts[1], parts[2] - 1, parts[3]);
-  
-  // Fallback
-  var d = new Date(dateStr);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-// ─── Global Filter State ────────────────────────────────────
-let filteredPreIssues = [], filteredIntents = [], filteredSyncs = [], filteredStores = [];
-
-function applyFilters() {
-  const q = (document.getElementById('searchInput').value || '').toLowerCase();
-  const fromVal = document.getElementById('dateFrom').value;
-  const toVal = document.getElementById('dateTo').value;
-  const fromDate = fromVal ? new Date(fromVal) : null;
-  const toDate = toVal ? new Date(toVal + 'T23:59:59') : null;
-  
-  // Filter Pre-Issues by search + date
-  filteredPreIssues = preIssues.filter(t => {
-    if (q) {
-      const text = Object.values(t).join(' ').toLowerCase();
-      if (!text.includes(q)) return false;
-    }
-    if (fromDate || toDate) {
-      const d = parseDate(t.Date);
-      if (!d) return false;
-      if (fromDate && d < fromDate) return false;
-      if (toDate && d > toDate) return false;
-    }
-    return true;
-  });
-  
-  // Filter Intents by search + date
-  filteredIntents = intents.filter(i => {
-    if (q) {
-      const text = Object.values(i).join(' ').toLowerCase();
-      if (!text.includes(q)) return false;
-    }
-    if (fromDate || toDate) {
-      const d = parseDate(i.Timestamp);
-      if (!d) return false;
-      if (fromDate && d < fromDate) return false;
-      if (toDate && d > toDate) return false;
-    }
-    return true;
-  });
-  
-  // Filter Syncs by search (no date field)
-  filteredSyncs = syncs.filter(s => {
-    if (q) {
-      const text = Object.values(s).join(' ').toLowerCase();
-      if (!text.includes(q)) return false;
-    }
-    return true;
-  });
-  
-  // Filter Stores by search (no date field)
-  filteredStores = stores.filter(s => {
-    if (q) {
-      const text = Object.values(s).join(' ').toLowerCase();
-      if (!text.includes(q)) return false;
-    }
-    return true;
-  });
-  
-  // Re-render everything with filtered data
-  renderFiltered();
-}
-
-function renderFiltered() {
-  updateKPIsFiltered();
-  updateChartsFiltered();
-  populateTablesFiltered();
-  populateAgentsFiltered();
-  populateRecentActivity();
-}
-
-function updateKPIsFiltered() {
-  const pending = filteredPreIssues.filter(t => t.Status === 'Pending').length;
-  const approved = filteredPreIssues.filter(t => t.Status === 'Approved').length;
-  const raised = filteredPreIssues.filter(t => t['Ticket Raised'] === 'Yes').length;
-  const synced = filteredSyncs.filter(s => s['Sync Status'] === 'Yes').length;
-  const syncFail = filteredSyncs.filter(s => s['Sync Status'] === 'No').length;
-  
-  animateCounter('kpiTotal', filteredPreIssues.length);
-  animateCounter('kpiPending', pending);
-  animateCounter('kpiApproved', approved);
-  animateCounter('kpiIntent', filteredIntents.length);
-  animateCounter('kpiTicketsRaised', raised);
-  animateCounter('kpiSynced', synced);
-  animateCounter('kpiStores', filteredStores.length);
-  animateCounter('kpiSyncFail', syncFail);
-  
-  document.getElementById('navBadgePreIssue').textContent = filteredPreIssues.length;
-  document.getElementById('navBadgeIntent').textContent = filteredIntents.length;
-}
-
-function updateChartsFiltered() {
-  const pending = filteredPreIssues.filter(t => t.Status === 'Pending').length;
-  const approved = filteredPreIssues.filter(t => t.Status === 'Approved').length;
-  const sentDev = filteredPreIssues.filter(t => t.Status === 'Sent to Dev').length;
-  const resolved = filteredPreIssues.filter(t => t.Status === 'Resolved').length;
-  const onHold = filteredPreIssues.filter(t => t.Status === 'On Hold').length;
-  charts.status.data.datasets[0].data = [pending,approved,sentDev,resolved,onHold];
-  charts.status.update();
-
-  const missing = filteredIntents.filter(i => i.Problem === 'Missing Intent').length;
-  const incorrect = filteredIntents.filter(i => (i.Problem||'').toLowerCase().includes('incorrect')).length;
-  charts.intent.data.datasets[0].data = [missing,incorrect];
-  charts.intent.update();
-
-  const synced = filteredSyncs.filter(s => s['Sync Status'] === 'Yes').length;
-  const failed = filteredSyncs.filter(s => s['Sync Status'] === 'No').length;
-  charts.sync.data.datasets[0].data = [synced,failed];
-  charts.sync.update();
-
-  const ac = {};
-  filteredPreIssues.forEach(t => { const a = t['Agent No.']; if (a) ac[a] = (ac[a]||0)+1; });
-  charts.agent.data.labels = Object.keys(ac);
-  charts.agent.data.datasets[0].data = Object.values(ac);
-  charts.agent.data.datasets[0].backgroundColor = Object.keys(ac).map((_,i) => ['rgba(99,102,241,0.7)','rgba(6,182,212,0.7)'][i%2]);
-  charts.agent.data.datasets[0].borderColor = Object.keys(ac).map((_,i) => ['#6366f1','#06b6d4'][i%2]);
-  charts.agent.update();
-}
-
-function populateTablesFiltered() {
-  // Dashboard summary
+  // Dashboard summary (with SLA)
   document.getElementById('dashTicketsBody').innerHTML = filteredPreIssues.length ? filteredPreIssues.map(t => `<tr>
     <td style="color:var(--text-accent);font-weight:600">${t['S.No']||''}</td>
     <td>${t['Agent No.']||'—'}</td>
@@ -507,9 +375,10 @@ function populateTablesFiltered() {
     <td>${t['Assigned To']||'—'}</td>
     <td>${t['Ticket Raised']==='Yes'?'✅':'❌'}</td>
     <td>${t.Date||''}</td>
-  </tr>`).join('') : '<tr><td colspan="7" class="no-results">No matching issues found</td></tr>';
+    <td>${getSLA(t.Date, t.Status)}</td>
+  </tr>`).join('') : '<tr><td colspan="8" class="no-results">No matching issues found</td></tr>';
 
-  // Full Pre-Issue tab
+  // Full Pre-Issue tab (with SLA)
   document.getElementById('preIssuesBody').innerHTML = filteredPreIssues.length ? filteredPreIssues.map(t => `<tr>
     <td>${t['S.No']||''}</td><td>${t['Agent No.']||'—'}</td>
     <td style="max-width:200px;white-space:normal">${t['Issue Title']||''}</td>
@@ -520,7 +389,8 @@ function populateTablesFiltered() {
     <td>${t['Assigned To']||'—'}</td>
     <td>${t['Ticket Raised']==='Yes'?'✅':'❌'}</td>
     <td>${t.Date||''}</td>
-  </tr>`).join('') : '<tr><td colspan="10" class="no-results">No matching tickets found</td></tr>';
+    <td>${getSLA(t.Date, t.Status)}</td>
+  </tr>`).join('') : '<tr><td colspan="11" class="no-results">No matching tickets found</td></tr>';
 
   // Intent Problems
   document.getElementById('intentBody').innerHTML = filteredIntents.length ? filteredIntents.map(i => `<tr>
@@ -554,11 +424,41 @@ function populateTablesFiltered() {
   </tr>`).join('') : '<tr><td colspan="10" class="no-results">No matching stores found</td></tr>';
 }
 
-function populateAgentsFiltered() {
+// ─── Recent Activity Feed ───────────────────────────────────
+function populateRecentActivity() {
+  const feed = document.getElementById('activityFeed');
+  if (!feed) return;
+  const activities = [];
+  filteredPreIssues.forEach(t => {
+    activities.push({
+      icon: t.Status === 'Approved' ? '✅' : '⏳',
+      text: `<strong>${t['Agent No.']||'System'}</strong> reported: ${t['Issue Title']}`,
+      status: t.Status, date: t.Date || '', type: 'issue'
+    });
+  });
+  filteredIntents.slice(0,3).forEach(i => {
+    activities.push({
+      icon: '💬',
+      text: `Intent problem <strong>#${i.ID}</strong>: ${i.Problem}`,
+      status: i.Status, date: i.Timestamp ? i.Timestamp.split(' ')[0] : '', type: 'intent'
+    });
+  });
+  feed.innerHTML = activities.slice(0,8).map(a => `
+    <div class="activity-item">
+      <div class="activity-icon">${a.icon}</div>
+      <div class="activity-content">
+        <div class="activity-text">${a.text}</div>
+        <div class="activity-meta">${badge(a.status)} · ${a.date}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── Agent Activity ─────────────────────────────────────────
+function populateAgents() {
   const colors = ['#6366f1','#8b5cf6','#ec4899','#ef4444','#f59e0b','#10b981','#06b6d4'];
   const ac = {};
   filteredPreIssues.forEach(t => { const a = t['Agent No.']; if (a) ac[a] = (ac[a]||0)+1; });
-  
   document.getElementById('agentList').innerHTML = Object.entries(ac).sort((a,b)=>b[1]-a[1]).map(([name,count],i) => `
     <div class="agent-item">
       <div class="agent-avatar" style="background:${colors[i%colors.length]}">${name.replace('Agent ','A')}</div>
@@ -569,12 +469,8 @@ function populateAgentsFiltered() {
 
 // ─── Events ─────────────────────────────────────────────────
 function setupEvents() {
-  // Global search — debounced
-  let searchTimeout;
-  document.getElementById('searchInput').addEventListener('input', function() {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(applyFilters, 250);
-  });
+  // Global search — instant
+  document.getElementById('searchInput').addEventListener('input', applyFilters);
 
   // Date range filter
   document.getElementById('dateFrom').addEventListener('change', applyFilters);
@@ -599,17 +495,18 @@ function setupEvents() {
       <td>${t['Assigned To']||'—'}</td>
       <td>${t['Ticket Raised']==='Yes'?'✅':'❌'}</td>
       <td>${t.Date||''}</td>
-    </tr>`).join('') : '<tr><td colspan="7" class="no-results">No matching issues</td></tr>';
+      <td>${getSLA(t.Date, t.Status)}</td>
+    </tr>`).join('') : '<tr><td colspan="8" class="no-results">No matching issues</td></tr>';
   });
 
   // Refresh button
   document.getElementById('refreshBtn').addEventListener('click', () => {
-    if (API_URL !== 'PASTE_YOUR_WEB_APP_URL_HERE') fetchData();
+    if (API_URL && API_URL !== 'PASTE_YOUR_WEB_APP_URL_HERE') fetchData();
     else { render(); document.getElementById('lastSync').textContent = 'Refreshed (Offline)'; }
   });
 
-  // Auto-refresh every 60 seconds when connected
+  // Auto-refresh every 60 seconds
   setInterval(() => {
-    if (API_URL !== 'PASTE_YOUR_WEB_APP_URL_HERE') fetchData();
+    if (API_URL && API_URL !== 'PASTE_YOUR_WEB_APP_URL_HERE') fetchData();
   }, 60000);
 }
