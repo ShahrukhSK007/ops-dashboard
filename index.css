@@ -423,6 +423,22 @@ body {
   box-shadow: var(--shadow-glow);
 }
 
+.kpi-clickable { cursor: pointer; }
+.kpi-clickable:hover { transform: translateY(-3px) scale(1.02); }
+
+.kpi-sub {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.kpi-sub .sub-pending { color: #f59e0b; }
+.kpi-sub .sub-approved { color: #3b82f6; }
+.kpi-sub .sub-raised { color: #8b5cf6; }
+.kpi-sub .sub-resolved { color: #10b981; }
+
+.nav-badge.danger { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+
 .kpi-total::before { background: var(--accent-gradient); }
 .kpi-open::before { background: linear-gradient(135deg, #ef4444, #f97316); }
 .kpi-resolved::before { background: linear-gradient(135deg, #10b981, #34d399); }

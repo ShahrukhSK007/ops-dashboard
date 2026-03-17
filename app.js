@@ -206,6 +206,7 @@ function renderAll() {
   updateKPIs();
   updateCharts();
   populateTables();
+  populateHighSeverity();
   populateAgents();
   populateRecentActivity();
 }
@@ -274,6 +275,19 @@ function updateKPIs() {
 
   document.getElementById('navBadgePreIssue').textContent = filteredPreIssues.length;
   document.getElementById('navBadgeIntent').textContent = filteredIntents.length;
+  document.getElementById('navBadgeSeverity').textContent = totalPriority;
+
+  // Sub-breakdowns
+  const approved = filteredPreIssues.filter(t => t.Status === 'Approved').length;
+  const resolved = filteredPreIssues.filter(t => t.Status === 'Resolved').length;
+  const onHold = filteredPreIssues.filter(t => t.Status === 'On Hold').length;
+  const subEl = document.getElementById('kpiTotalSub');
+  if (subEl) subEl.innerHTML = `<span class="sub-pending">${pending} Pending</span> · <span class="sub-approved">${approved} Approved</span> · <span class="sub-raised">${raised} Raised</span> · <span class="sub-resolved">${resolved} Resolved</span>`;
+
+  const intentPending = filteredIntents.filter(i => i.Status === 'Pending').length;
+  const intentResolved = filteredIntents.filter(i => i.Status === 'Resolved').length;
+  const intentSubEl = document.getElementById('kpiIntentSub');
+  if (intentSubEl) intentSubEl.innerHTML = `<span class="sub-pending">${intentPending} Pending</span> · <span class="sub-resolved">${intentResolved} Resolved</span>`;
 }
 
 function animateCounter(id, target) {
@@ -296,7 +310,7 @@ function animateCounter(id, target) {
 function initNav() {
   const navItems = document.querySelectorAll('.nav-item');
   const tabs = document.querySelectorAll('.tab-content');
-  const titles = {'dashboard':'Operations Dashboard','pre-issues':'AI Pre-Issue Tickets','intents':'Intent Problems','sync-verify':'Sync Verification','store-check':'Store Template Check'};
+  const titles = {'dashboard':'Operations Dashboard','high-severity':'High Severity Tickets','pre-issues':'AI Pre-Issue Tickets','intents':'Intent Problems','sync-verify':'Sync Verification','store-check':'Store Template Check'};
 
   navItems.forEach(item => {
     item.addEventListener('click', e => {
@@ -485,6 +499,42 @@ function populateTables() {
   </tr>`).join('') : '<tr><td colspan="10" class="no-results">No matching stores found</td></tr>';
 }
 
+// ─── High Severity Tab ─────────────────────────────────────
+function populateHighSeverity() {
+  const body = document.getElementById('highSeverityBody');
+  if (!body) return;
+  const rows = [];
+  filteredPreIssues.forEach(t => {
+    if (t.Priority === 'Yes' || priorityPreIssues.has(t['S.No'])) {
+      rows.push(`<tr class="row-priority">
+        <td><span class="badge badge-approved">Pre-Issue</span></td>
+        <td style="color:var(--text-accent);font-weight:600">${t['S.No']||''}</td>
+        <td>${t['Agent No.']||'—'}</td>
+        <td style="max-width:250px;white-space:normal">${t['Issue Title']||''}</td>
+        <td>${badge(t.Status)}</td>
+        <td>${t['Assigned To']||'—'}</td>
+        <td>${t.Date||''}</td>
+        <td>${getSLA(t.Date, t.Status)}</td>
+      </tr>`);
+    }
+  });
+  filteredIntents.forEach(i => {
+    if (i.Priority === 'Yes' || priorityIntents.has(i.ID)) {
+      rows.push(`<tr class="row-priority">
+        <td><span class="badge badge-pending">Intent</span></td>
+        <td style="color:var(--text-accent);font-weight:600">${i.ID||''}</td>
+        <td>—</td>
+        <td style="max-width:250px;white-space:normal">${i.Problem||''}: ${i.Description||''}</td>
+        <td>${badge(i.Status)}</td>
+        <td>—</td>
+        <td>${i.Timestamp ? i.Timestamp.split(' ')[0] : ''}</td>
+        <td>—</td>
+      </tr>`);
+    }
+  });
+  body.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="8" class="no-results">No high severity tickets found</td></tr>';
+}
+
 // ─── Recent Activity Feed ───────────────────────────────────
 function populateRecentActivity() {
   const feed = document.getElementById('activityFeed');
@@ -608,6 +658,31 @@ function setupEvents() {
   document.getElementById('refreshBtn').addEventListener('click', () => {
     if (API_URL && API_URL !== 'PASTE_YOUR_WEB_APP_URL_HERE') fetchData();
     else { render(); document.getElementById('lastSync').textContent = 'Refreshed (Offline)'; }
+  });
+
+  // KPI card click navigation
+  document.querySelectorAll('.kpi-clickable').forEach(card => {
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', () => {
+      const tab = card.dataset.navigate;
+      const filter = card.dataset.filter || null;
+      if (tab) {
+        // Navigate to the tab
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        const navItem = document.querySelector(`.nav-item[data-tab="${tab}"]`);
+        if (navItem) navItem.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab-' + tab).classList.add('active');
+        const titles = {'dashboard':'Operations Dashboard','high-severity':'High Severity Tickets','pre-issues':'AI Pre-Issue Tickets','intents':'Intent Problems','sync-verify':'Sync Verification','store-check':'Store Template Check'};
+        document.getElementById('pageTitle').textContent = titles[tab] || 'Dashboard';
+        document.getElementById('sidebar').classList.remove('open');
+        // If filter set, auto-select the status filter
+        if (filter && tab === 'pre-issues') {
+          const statusFilter = document.getElementById('statusFilter');
+          if (statusFilter) { statusFilter.value = filter; statusFilter.dispatchEvent(new Event('change')); }
+        }
+      }
+    });
   });
 
   // Auto-refresh every 60 seconds
