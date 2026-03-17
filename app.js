@@ -493,31 +493,71 @@ function populateTables() {
 // ─── Recent Activity Feed ───────────────────────────────────
 function populateRecentActivity() {
   const feed = document.getElementById('activityFeed');
-  if (!feed) return;
-  const activities = [];
-  filteredPreIssues.forEach(t => {
-    activities.push({
-      icon: t.Status === 'Approved' ? '✅' : '⏳',
-      text: `<strong>${t['Agent No.']||'System'}</strong> reported: ${t['Issue Title']}`,
-      status: t.Status, date: t.Date || '', type: 'issue'
+  const prioFeed = document.getElementById('priorityFeed');
+  
+  if (feed) {
+    const activities = [];
+    filteredPreIssues.forEach(t => {
+      activities.push({
+        icon: t.Status === 'Approved' ? '✅' : '⏳',
+        text: `<strong>${t['Agent No.']||'System'}</strong> reported: ${t['Issue Title']}`,
+        status: t.Status, date: t.Date || '', type: 'issue'
+      });
     });
-  });
-  filteredIntents.slice(0,3).forEach(i => {
-    activities.push({
-      icon: '💬',
-      text: `Intent problem <strong>#${i.ID}</strong>: ${i.Problem}`,
-      status: i.Status, date: i.Timestamp ? i.Timestamp.split(' ')[0] : '', type: 'intent'
+    filteredIntents.slice(0,3).forEach(i => {
+      activities.push({
+        icon: '💬',
+        text: `Intent problem <strong>#${i.ID}</strong>: ${i.Problem}`,
+        status: i.Status, date: i.Timestamp ? i.Timestamp.split(' ')[0] : '', type: 'intent'
+      });
     });
-  });
-  feed.innerHTML = activities.slice(0,8).map(a => `
-    <div class="activity-item">
-      <div class="activity-icon">${a.icon}</div>
-      <div class="activity-content">
-        <div class="activity-text">${a.text}</div>
-        <div class="activity-meta">${badge(a.status)} · ${a.date}</div>
+    feed.innerHTML = activities.slice(0,8).map(a => `
+      <div class="activity-item">
+        <div class="activity-icon">${a.icon}</div>
+        <div class="activity-content">
+          <div class="activity-text">${a.text}</div>
+          <div class="activity-meta">${badge(a.status)} · ${a.date}</div>
+        </div>
       </div>
-    </div>
-  `).join('');
+    `).join('');
+  }
+
+  // Populate Priority Feed
+  if (prioFeed) {
+    const prios = [];
+    filteredPreIssues.forEach(t => {
+      if (t.Priority === 'Yes' || priorityPreIssues.has(t['S.No'])) {
+        prios.push({
+          icon: '⭐',
+          text: `<strong>${t['Agent No.']||'System'}</strong>: ${t['Issue Title']}`,
+          status: t.Status, date: t.Date || '', type: 'issue'
+        });
+      }
+    });
+    filteredIntents.forEach(i => {
+      if (i.Priority === 'Yes' || priorityIntents.has(i.ID)) {
+        prios.push({
+          icon: '⭐',
+          text: `Intent <strong>#${i.ID}</strong>: ${i.Problem}`,
+          status: i.Status, date: i.Timestamp ? i.Timestamp.split(' ')[0] : '', type: 'intent'
+        });
+      }
+    });
+
+    if (prios.length === 0) {
+      prioFeed.innerHTML = '<div class="no-results" style="margin-top:2rem">No priority issues</div>';
+    } else {
+      prioFeed.innerHTML = prios.map(a => `
+        <div class="activity-item" style="border-left: 3px solid #f59e0b; padding-left: 12px; background: rgba(245, 158, 11, 0.05); margin-bottom: 8px; border-radius: 4px;">
+          <div class="activity-icon" style="background:#fef3c7; color:#f59e0b">${a.icon}</div>
+          <div class="activity-content">
+            <div class="activity-text">${a.text}</div>
+            <div class="activity-meta">${badge(a.status)} · ${a.date}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
 }
 
 // ─── Agent Activity ─────────────────────────────────────────
