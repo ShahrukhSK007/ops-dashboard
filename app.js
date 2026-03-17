@@ -1,7 +1,7 @@
 /**
- * AI App 3.1 — Operations Dashboard (v5 Final)
+ * AI App 3.1 — Operations Dashboard (v6)
  * Features: Live API, Offline Fallback, Global Search, Date Range,
- *           Trend Chart, SLA Tracking, Mobile Responsive
+ *           Trend Chart, SLA Tracking, Priority Issues, Mobile Responsive
  */
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -14,7 +14,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwB_YNqJm64CXBeylOD0-ZK
 const OFFLINE_DATA = {
   preIssues: [
     {'S.No':1,'Agent No.':'Agent 7','Issue Title':'Incorrect Mapped Intent','Description':'Incorrect Mapped_intent generated on "Like" or reactive messages. Welcome_Text intent MUST only appear on Thank You or Thanks.','Image/PDF Link':'https://drive.google.com/file/d/1eA_s_2iMZuwp7p3Ccfvg3ga4ktG7QddU/view','Status':'Approved','Notes':'','Assigned To':'LEENA','Ticket Raised':'Yes','Date':'05/03/2026'},
-    {'S.No':2,'Agent No.':'Agent 7','Issue Title':'Spanish Customer Translation on 3.1','Description':'Agents having difficulty handling Spanish customers. Need translation options in translator or chat window.','Image/PDF Link':'','Status':'Pending','Notes':'Bilal will clarify the scenario further.','Assigned To':'','Ticket Raised':'No','Date':'04/03/2026'},
+    {'S.No':2,'Agent No.':'Agent 7','Issue Title':'Spanish Customer Translation on 3.1 (Autoantion)','Description':'Agents having difficulty handling Spanish customers. Need translation options in translator or chat window.','Image/PDF Link':'','Status':'Ticket Raised','Notes':'Bilal will clarify the scenario further.','Assigned To':'','Ticket Raised':'No','Date':'04/03/2026'},
     {'S.No':3,'Agent No.':'Agent 10','Issue Title':'Records not reflecting in AI app (3.1)','Description':'System not reflecting any records. Records must be properly displayed for agent accounts.','Image/PDF Link':'https://drive.google.com/file/d/1N4gin1Q-uNbSVX6Me7LpFLDNDlp78BSb/view','Status':'Approved','Notes':'','Assigned To':'CHAND','Ticket Raised':'Yes','Date':'04/03/2026'},
     {'S.No':4,'Agent No.':'Agent 7','Issue Title':'Incorrect Slot Booking Text & Spacing','Description':'Slot booking Text incorrect in AI App (3.1). Must display correct version with proper spacing.','Image/PDF Link':'','Status':'Approved','Notes':'','Assigned To':'CHAND','Ticket Raised':'Yes','Date':'05/03/2026'},
     {'S.No':5,'Agent No.':'Agent 7','Issue Title':'LETME Slot Generated but Not Available','Description':'After LETME slot confirmation reflects "unfortunately we do not have anything". Customer 7669482.','Image/PDF Link':'https://drive.google.com/file/d/1h_COCcT1bUN9FN8wRE8CqV8QR9DCuZ0-/view','Status':'Pending','Notes':'Holding - not consistent across agents.','Assigned To':'CHAND','Ticket Raised':'No','Date':'04/03/2026'},
@@ -85,6 +85,10 @@ let preIssues = [], intents = [], syncs = [], stores = [];
 let filteredPreIssues = [], filteredIntents = [], filteredSyncs = [], filteredStores = [];
 let charts = {};
 
+// Priority tracking — Sets of S.No / ID for toggling
+const priorityPreIssues = new Set();
+const priorityIntents = new Set();
+
 // ─── Date Parsing Helper ────────────────────────────────────
 function parseDate(dateStr) {
   if (!dateStr) return null;
@@ -96,6 +100,9 @@ function parseDate(dateStr) {
   // yyyy-MM-dd
   p = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (p) return new Date(p[1], p[2] - 1, p[3]);
+  // MM/dd/yyyy format
+  p = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (p) return new Date(p[3], p[1] - 1, p[2]);
   var d = new Date(dateStr);
   return isNaN(d.getTime()) ? null : d;
 }
@@ -116,6 +123,33 @@ function getSLA(dateStr, status) {
   return `<span class="sla-badge sla-overdue">${days}d ⚠</span>`;
 }
 
+// ─── Normalize Status (rename "Sent to Dev" → "Ticket Raised") ──
+function normalizeStatus(status) {
+  if (!status) return status;
+  const s = status.trim();
+  if (s.toLowerCase() === 'sent to dev') return 'Ticket Raised';
+  return s;
+}
+
+// ─── Priority Toggle Functions (global scope) ───────────────
+window.togglePriorityPreIssue = function(sno) {
+  if (priorityPreIssues.has(sno)) {
+    priorityPreIssues.delete(sno);
+  } else {
+    priorityPreIssues.add(sno);
+  }
+  renderAll();
+};
+
+window.togglePriorityIntent = function(id) {
+  if (priorityIntents.has(id)) {
+    priorityIntents.delete(id);
+  } else {
+    priorityIntents.add(id);
+  }
+  renderAll();
+};
+
 // ─── Init ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initNav();
@@ -130,8 +164,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function loadOffline() {
-  preIssues = OFFLINE_DATA.preIssues;
-  intents = OFFLINE_DATA.intents;
+  preIssues = OFFLINE_DATA.preIssues.map(t => ({ ...t, Status: normalizeStatus(t.Status) }));
+  intents = OFFLINE_DATA.intents.map(i => ({ ...i, Status: normalizeStatus(i.Status) }));
   syncs = OFFLINE_DATA.syncs;
   stores = OFFLINE_DATA.stores;
   render();
@@ -144,10 +178,17 @@ async function fetchData() {
   try {
     const res = await fetch(API_URL);
     const data = await res.json();
-    preIssues = data.preIssues || [];
-    intents = data.intents || [];
+    preIssues = (data.preIssues || []).map(t => ({ ...t, Status: normalizeStatus(t.Status) }));
+    intents = (data.intents || []).map(i => ({ ...i, Status: normalizeStatus(i.Status) }));
     syncs = data.syncs || [];
     stores = data.stores || [];
+
+    // Update agent online count if API provides it
+    if (data.agentsOnline) {
+      const el = document.getElementById('agentOnlineText');
+      if (el) el.textContent = data.agentsOnline + ' Agents Online';
+    }
+
     render();
     document.getElementById('lastSync').textContent = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) + ' ✅ Live';
   } catch(e) {
@@ -220,16 +261,16 @@ function applyFilters() {
 // ─── KPIs ───────────────────────────────────────────────────
 function updateKPIs() {
   const pending = filteredPreIssues.filter(t => t.Status === 'Pending').length;
-  const approved = filteredPreIssues.filter(t => t.Status === 'Approved').length;
   const raised = filteredPreIssues.filter(t => t['Ticket Raised'] === 'Yes').length;
+  const totalPriority = priorityPreIssues.size + priorityIntents.size;
   const synced = filteredSyncs.filter(s => s['Sync Status'] === 'Yes').length;
   const syncFail = filteredSyncs.filter(s => s['Sync Status'] === 'No').length;
 
   animateCounter('kpiTotal', filteredPreIssues.length);
   animateCounter('kpiPending', pending);
-  animateCounter('kpiApproved', approved);
-  animateCounter('kpiIntent', filteredIntents.length);
   animateCounter('kpiTicketsRaised', raised);
+  animateCounter('kpiIntent', filteredIntents.length);
+  animateCounter('kpiPriority', totalPriority);
   animateCounter('kpiSynced', synced);
   animateCounter('kpiStores', filteredStores.length);
   animateCounter('kpiSyncFail', syncFail);
@@ -294,7 +335,7 @@ function initCharts() {
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { padding: 15, usePointStyle: true, pointStyleWidth: 8, font: { size: 11 } } } }, scales: { x: { grid: { color: 'rgba(30,41,59,0.3)' }, ticks: { font: { size: 10 } } }, y: { beginAtZero: true, grid: { color: 'rgba(30,41,59,0.3)' }, ticks: { stepSize: 1, font: { size: 11 } } } }, animation: { duration: 1200, easing: 'easeOutQuart' } }
   });
 
-  charts.status = new Chart(document.getElementById('statusPieChart'), {type:'doughnut',data:{labels:['Pending','Approved','Sent to Dev','Resolved','On Hold'],datasets:[{data:[0,0,0,0,0],backgroundColor:['#f59e0b','#3b82f6','#8b5cf6','#10b981','#ef4444'],borderColor:'#1a1f35',borderWidth:3,hoverOffset:8}]},options:{cutout:'65%',responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{padding:14,usePointStyle:true,pointStyleWidth:8,font:{size:11}}}},animation:{duration:1200,easing:'easeOutQuart'}}});
+  charts.status = new Chart(document.getElementById('statusPieChart'), {type:'doughnut',data:{labels:['Pending','Approved','Ticket Raised','Resolved','On Hold'],datasets:[{data:[0,0,0,0,0],backgroundColor:['#f59e0b','#3b82f6','#8b5cf6','#10b981','#ef4444'],borderColor:'#1a1f35',borderWidth:3,hoverOffset:8}]},options:{cutout:'65%',responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{padding:14,usePointStyle:true,pointStyleWidth:8,font:{size:11}}}},animation:{duration:1200,easing:'easeOutQuart'}}});
   
   charts.intent = new Chart(document.getElementById('intentBarChart'), {type:'bar',data:{labels:['Missing Intent','Incorrect Intent'],datasets:[{data:[0,0],backgroundColor:['rgba(245,158,11,0.7)','rgba(239,68,68,0.7)'],borderColor:['#f59e0b','#ef4444'],borderWidth:1,borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{beginAtZero:true,grid:{color:'rgba(30,41,59,0.3)'},ticks:{stepSize:1,font:{size:11}}}},animation:{duration:1000,easing:'easeOutQuart'}}});
   
@@ -330,10 +371,10 @@ function updateCharts() {
   // Status pie
   const pending = filteredPreIssues.filter(t => t.Status === 'Pending').length;
   const approved = filteredPreIssues.filter(t => t.Status === 'Approved').length;
-  const sentDev = filteredPreIssues.filter(t => t.Status === 'Sent to Dev').length;
+  const ticketRaised = filteredPreIssues.filter(t => t.Status === 'Ticket Raised').length;
   const resolved = filteredPreIssues.filter(t => t.Status === 'Resolved').length;
   const onHold = filteredPreIssues.filter(t => t.Status === 'On Hold').length;
-  charts.status.data.datasets[0].data = [pending,approved,sentDev,resolved,onHold];
+  charts.status.data.datasets[0].data = [pending,approved,ticketRaised,resolved,onHold];
   charts.status.update();
 
   // Intent bar
@@ -360,47 +401,70 @@ function updateCharts() {
 
 // ─── Status Badge ───────────────────────────────────────────
 function badge(s) {
-  const m = {'Pending':'badge-pending','Approved':'badge-approved','Sent to Dev':'badge-dev','Resolved':'badge-resolved','On Hold':'badge-onhold','Under Review':'badge-review','Missing Intent':'badge-pending','Incorrect Intent':'badge-open','Yes':'badge-resolved','No':'badge-open'};
+  const m = {'Pending':'badge-pending','Approved':'badge-approved','Ticket Raised':'badge-dev','Resolved':'badge-resolved','On Hold':'badge-onhold','Under Review':'badge-review','Missing Intent':'badge-pending','Incorrect Intent':'badge-open','Yes':'badge-resolved','No':'badge-open'};
   return `<span class="badge ${m[s]||'badge-pending'}">${s||'—'}</span>`;
+}
+
+// ─── Priority Button Helper ─────────────────────────────────
+function priorityBtn(isActive, onClickFn) {
+  const cls = isActive ? 'priority-btn active' : 'priority-btn';
+  return `<button class="${cls}" onclick="${onClickFn}" title="${isActive ? 'Remove Priority' : 'Mark as Priority'}">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="${isActive ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+    </svg>
+  </button>`;
 }
 
 // ─── Tables ─────────────────────────────────────────────────
 function populateTables() {
-  // Dashboard summary (with SLA)
-  document.getElementById('dashTicketsBody').innerHTML = filteredPreIssues.length ? filteredPreIssues.map(t => `<tr>
-    <td style="color:var(--text-accent);font-weight:600">${t['S.No']||''}</td>
+  // Dashboard summary (with SLA + Priority)
+  document.getElementById('dashTicketsBody').innerHTML = filteredPreIssues.length ? filteredPreIssues.map(t => {
+    const sno = t['S.No'];
+    const isPriority = priorityPreIssues.has(sno);
+    return `<tr class="${isPriority ? 'row-priority' : ''}">
+    <td style="color:var(--text-accent);font-weight:600">${sno||''}</td>
     <td>${t['Agent No.']||'—'}</td>
     <td style="max-width:250px;white-space:normal">${t['Issue Title']||''}</td>
     <td>${badge(t.Status)}</td>
     <td>${t['Assigned To']||'—'}</td>
-    <td>${t['Ticket Raised']==='Yes'?'✅':'❌'}</td>
+    <td>${priorityBtn(isPriority, "togglePriorityPreIssue("+sno+")")}</td>
     <td>${t.Date||''}</td>
     <td>${getSLA(t.Date, t.Status)}</td>
-  </tr>`).join('') : '<tr><td colspan="8" class="no-results">No matching issues found</td></tr>';
+  </tr>`;
+  }).join('') : '<tr><td colspan="8" class="no-results">No matching issues found</td></tr>';
 
-  // Full Pre-Issue tab (with SLA)
-  document.getElementById('preIssuesBody').innerHTML = filteredPreIssues.length ? filteredPreIssues.map(t => `<tr>
-    <td>${t['S.No']||''}</td><td>${t['Agent No.']||'—'}</td>
+  // Full Pre-Issue tab (with SLA + Priority)
+  document.getElementById('preIssuesBody').innerHTML = filteredPreIssues.length ? filteredPreIssues.map(t => {
+    const sno = t['S.No'];
+    const isPriority = priorityPreIssues.has(sno);
+    return `<tr class="${isPriority ? 'row-priority' : ''}">
+    <td>${sno||''}</td><td>${t['Agent No.']||'—'}</td>
     <td style="max-width:200px;white-space:normal">${t['Issue Title']||''}</td>
     <td style="max-width:300px;white-space:normal">${t.Description||''}</td>
     <td>${t['Image/PDF Link']?`<a href="${t['Image/PDF Link']}" target="_blank" style="color:var(--accent-primary)">📎 View</a>`:'—'}</td>
     <td>${badge(t.Status)}</td>
     <td style="max-width:200px;white-space:normal">${t.Notes||'—'}</td>
     <td>${t['Assigned To']||'—'}</td>
-    <td>${t['Ticket Raised']==='Yes'?'✅':'❌'}</td>
+    <td>${priorityBtn(isPriority, "togglePriorityPreIssue("+sno+")")}</td>
     <td>${t.Date||''}</td>
     <td>${getSLA(t.Date, t.Status)}</td>
-  </tr>`).join('') : '<tr><td colspan="11" class="no-results">No matching tickets found</td></tr>';
+  </tr>`;
+  }).join('') : '<tr><td colspan="11" class="no-results">No matching tickets found</td></tr>';
 
-  // Intent Problems
-  document.getElementById('intentBody').innerHTML = filteredIntents.length ? filteredIntents.map(i => `<tr>
-    <td>${i.Timestamp||''}</td><td style="color:var(--text-accent);font-weight:600">${i.ID||''}</td>
+  // Intent Problems (with Priority)
+  document.getElementById('intentBody').innerHTML = filteredIntents.length ? filteredIntents.map(i => {
+    const id = i.ID;
+    const isPriority = priorityIntents.has(id);
+    return `<tr class="${isPriority ? 'row-priority' : ''}">
+    <td>${i.Timestamp||''}</td><td style="color:var(--text-accent);font-weight:600">${id||''}</td>
     <td>${badge(i.Problem)}</td>
     <td style="max-width:250px;white-space:normal">${i.Description||'—'}</td>
     <td>${i.Image?`<a href="${i.Image}" target="_blank" style="color:var(--accent-primary)">📸 View</a>`:'—'}</td>
     <td>${i.PDF?`<a href="${i.PDF}" target="_blank" style="color:var(--accent-primary)">📄 View</a>`:'—'}</td>
     <td>${badge(i.Status)}</td>
-  </tr>`).join('') : '<tr><td colspan="7" class="no-results">No matching intent problems found</td></tr>';
+    <td>${priorityBtn(isPriority, "togglePriorityIntent('"+id+"')")}</td>
+  </tr>`;
+  }).join('') : '<tr><td colspan="8" class="no-results">No matching intent problems found</td></tr>';
 
   // Sync Verification
   document.getElementById('syncBody').innerHTML = filteredSyncs.length ? filteredSyncs.map(s => `<tr class="${s['Sync Status']==='No'?'row-danger':''}">
@@ -487,16 +551,20 @@ function setupEvents() {
   document.getElementById('statusFilter').addEventListener('change', function() {
     const val = this.value;
     const filtered = val === 'all' ? filteredPreIssues : filteredPreIssues.filter(t => t.Status === val);
-    document.getElementById('dashTicketsBody').innerHTML = filtered.length ? filtered.map(t => `<tr>
-      <td style="color:var(--text-accent);font-weight:600">${t['S.No']||''}</td>
+    document.getElementById('dashTicketsBody').innerHTML = filtered.length ? filtered.map(t => {
+      const sno = t['S.No'];
+      const isPriority = priorityPreIssues.has(sno);
+      return `<tr class="${isPriority ? 'row-priority' : ''}">
+      <td style="color:var(--text-accent);font-weight:600">${sno||''}</td>
       <td>${t['Agent No.']||'—'}</td>
       <td style="max-width:250px;white-space:normal">${t['Issue Title']||''}</td>
       <td>${badge(t.Status)}</td>
       <td>${t['Assigned To']||'—'}</td>
-      <td>${t['Ticket Raised']==='Yes'?'✅':'❌'}</td>
+      <td>${priorityBtn(isPriority, "togglePriorityPreIssue("+sno+")")}</td>
       <td>${t.Date||''}</td>
       <td>${getSLA(t.Date, t.Status)}</td>
-    </tr>`).join('') : '<tr><td colspan="8" class="no-results">No matching issues</td></tr>';
+    </tr>`;
+    }).join('') : '<tr><td colspan="8" class="no-results">No matching issues</td></tr>';
   });
 
   // Refresh button

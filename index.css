@@ -708,6 +708,57 @@ body {
 .badge-low { background: var(--color-green-soft); color: var(--color-green); }
 .badge-onhold { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
 
+/* ─── Priority Button ─────────────────────────────────────── */
+.priority-btn {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  padding: 0;
+}
+
+.priority-btn:hover {
+  border-color: #f59e0b;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+  transform: scale(1.15);
+}
+
+.priority-btn.active {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+  color: #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+  animation: priority-glow 2s infinite;
+}
+
+@keyframes priority-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.2); }
+  50% { box-shadow: 0 0 16px rgba(245, 158, 11, 0.4); }
+}
+
+/* ─── Priority Row Highlight ──────────────────────────────── */
+.row-priority {
+  background: rgba(245, 158, 11, 0.04) !important;
+  border-left: 3px solid #f59e0b !important;
+}
+
+.row-priority:hover {
+  background: rgba(245, 158, 11, 0.08) !important;
+}
+
+/* ─── Priority KPI Card ──────────────────────────────────── */
+.kpi-priority::before { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+.kpi-priority .kpi-icon { background: var(--color-orange-soft); color: var(--color-orange); }
+.kpi-priority::after { background: radial-gradient(circle at 30% 50%, rgba(245, 158, 11, 0.08), transparent 70%); }
+
 /* ─── Agent Activity ───────────────────────────────────────── */
 .agent-activity-card {
   background: var(--bg-card);

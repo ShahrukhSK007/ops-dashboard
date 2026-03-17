@@ -47,7 +47,7 @@
     </nav>
 
     <div class="sidebar-footer">
-      <div class="team-status"><div class="status-dot online"></div><span>35+ Agents Online</span></div>
+      <div class="team-status"><div class="status-dot online"></div><span id="agentOnlineText">35+ Agents Online</span></div>
       <div class="last-sync">Last sync: <span id="lastSync">Loading...</span></div>
     </div>
   </aside>
@@ -90,9 +90,9 @@
           <div class="kpi-info"><span class="kpi-label">PENDING</span><span class="kpi-value" id="kpiPending">—</span></div>
           <div class="kpi-trend down">Needs Action</div>
         </div>
-        <div class="kpi-card kpi-resolved">
-          <div class="kpi-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
-          <div class="kpi-info"><span class="kpi-label">APPROVED</span><span class="kpi-value" id="kpiApproved">—</span></div>
+        <div class="kpi-card kpi-tickets">
+          <div class="kpi-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>
+          <div class="kpi-info"><span class="kpi-label">TICKETS RAISED</span><span class="kpi-value" id="kpiTicketsRaised">—</span></div>
         </div>
         <div class="kpi-card kpi-intent">
           <div class="kpi-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
@@ -100,9 +100,9 @@
         </div>
       </div>
       <div class="kpi-grid">
-        <div class="kpi-card kpi-tickets">
-          <div class="kpi-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>
-          <div class="kpi-info"><span class="kpi-label">TICKETS RAISED</span><span class="kpi-value" id="kpiTicketsRaised">—</span></div>
+        <div class="kpi-card kpi-priority">
+          <div class="kpi-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+          <div class="kpi-info"><span class="kpi-label">PRIORITY ISSUES</span><span class="kpi-value" id="kpiPriority">—</span></div>
         </div>
         <div class="kpi-card kpi-sync">
           <div class="kpi-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></div>
@@ -129,10 +129,10 @@
       <div class="table-card">
         <div class="table-header">
           <h3>AI Pre-Issue Tickets</h3>
-          <select class="table-filter" id="statusFilter"><option value="all">All Status</option><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Sent to Dev">Sent to Dev</option><option value="Resolved">Resolved</option><option value="On Hold">On Hold</option></select>
+          <select class="table-filter" id="statusFilter"><option value="all">All Status</option><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Ticket Raised">Ticket Raised</option><option value="Resolved">Resolved</option><option value="On Hold">On Hold</option></select>
         </div>
         <div class="table-wrapper">
-          <table class="data-table"><thead><tr><th>S.No</th><th>Agent</th><th>Issue Title</th><th>Status</th><th>Assigned To</th><th>Ticket</th><th>Date</th><th>SLA</th></tr></thead><tbody id="dashTicketsBody"></tbody></table>
+          <table class="data-table"><thead><tr><th>S.No</th><th>Agent</th><th>Issue Title</th><th>Status</th><th>Assigned To</th><th>Priority</th><th>Date</th><th>SLA</th></tr></thead><tbody id="dashTicketsBody"></tbody></table>
         </div>
       </div>
 
@@ -149,7 +149,7 @@
     <section class="tab-content" id="tab-pre-issues">
       <div class="tab-header-bar"><h3>AI Pre-Issue Tickets</h3></div>
       <div class="table-card"><div class="table-wrapper">
-        <table class="data-table"><thead><tr><th>S.No</th><th>Agent</th><th>Issue Title</th><th>Description</th><th>Link</th><th>Status</th><th>Notes</th><th>Assigned To</th><th>Ticket</th><th>Date</th><th>SLA</th></tr></thead><tbody id="preIssuesBody"></tbody></table>
+        <table class="data-table"><thead><tr><th>S.No</th><th>Agent</th><th>Issue Title</th><th>Description</th><th>Link</th><th>Status</th><th>Notes</th><th>Assigned To</th><th>Priority</th><th>Date</th><th>SLA</th></tr></thead><tbody id="preIssuesBody"></tbody></table>
       </div></div>
     </section>
 
@@ -157,7 +157,7 @@
     <section class="tab-content" id="tab-intents">
       <div class="tab-header-bar"><h3>Intent Problem Report</h3></div>
       <div class="table-card"><div class="table-wrapper">
-        <table class="data-table"><thead><tr><th>Timestamp</th><th>ID</th><th>Problem</th><th>Description</th><th>Image</th><th>PDF</th><th>Status</th></tr></thead><tbody id="intentBody"></tbody></table>
+        <table class="data-table"><thead><tr><th>Timestamp</th><th>ID</th><th>Problem</th><th>Description</th><th>Image</th><th>PDF</th><th>Status</th><th>Priority</th></tr></thead><tbody id="intentBody"></tbody></table>
       </div></div>
     </section>
 
