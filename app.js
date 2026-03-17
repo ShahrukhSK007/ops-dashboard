@@ -183,12 +183,7 @@ async function fetchData() {
     syncs = data.syncs || [];
     stores = data.stores || [];
 
-    // Update agent online count if API provides it
-    if (data.agentsOnline) {
-      const el = document.getElementById('agentOnlineText');
-      if (el) el.textContent = data.agentsOnline + ' Agents Online';
-    }
-
+    // Agent online count tracking removed per user request
     render();
     document.getElementById('lastSync').textContent = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) + ' ✅ Live';
   } catch(e) {
