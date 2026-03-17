@@ -262,7 +262,9 @@ function applyFilters() {
 function updateKPIs() {
   const pending = filteredPreIssues.filter(t => t.Status === 'Pending').length;
   const raised = filteredPreIssues.filter(t => t['Ticket Raised'] === 'Yes').length;
-  const totalPriority = priorityPreIssues.size + priorityIntents.size;
+  const prePriorityCount = filteredPreIssues.filter(t => t.Priority === 'Yes' || priorityPreIssues.has(t['S.No'])).length;
+  const intentPriorityCount = filteredIntents.filter(i => i.Priority === 'Yes' || priorityIntents.has(i.ID)).length;
+  const totalPriority = prePriorityCount + intentPriorityCount;
   const synced = filteredSyncs.filter(s => s['Sync Status'] === 'Yes').length;
   const syncFail = filteredSyncs.filter(s => s['Sync Status'] === 'No').length;
 
@@ -420,7 +422,7 @@ function populateTables() {
   // Dashboard summary (with SLA + Priority)
   document.getElementById('dashTicketsBody').innerHTML = filteredPreIssues.length ? filteredPreIssues.map(t => {
     const sno = t['S.No'];
-    const isPriority = priorityPreIssues.has(sno);
+    const isPriority = priorityPreIssues.has(sno) || t.Priority === 'Yes';
     return `<tr class="${isPriority ? 'row-priority' : ''}">
     <td style="color:var(--text-accent);font-weight:600">${sno||''}</td>
     <td>${t['Agent No.']||'—'}</td>
@@ -436,7 +438,7 @@ function populateTables() {
   // Full Pre-Issue tab (with SLA + Priority)
   document.getElementById('preIssuesBody').innerHTML = filteredPreIssues.length ? filteredPreIssues.map(t => {
     const sno = t['S.No'];
-    const isPriority = priorityPreIssues.has(sno);
+    const isPriority = priorityPreIssues.has(sno) || t.Priority === 'Yes';
     return `<tr class="${isPriority ? 'row-priority' : ''}">
     <td>${sno||''}</td><td>${t['Agent No.']||'—'}</td>
     <td style="max-width:200px;white-space:normal">${t['Issue Title']||''}</td>
@@ -454,7 +456,7 @@ function populateTables() {
   // Intent Problems (with Priority)
   document.getElementById('intentBody').innerHTML = filteredIntents.length ? filteredIntents.map(i => {
     const id = i.ID;
-    const isPriority = priorityIntents.has(id);
+    const isPriority = priorityIntents.has(id) || i.Priority === 'Yes';
     return `<tr class="${isPriority ? 'row-priority' : ''}">
     <td>${i.Timestamp||''}</td><td style="color:var(--text-accent);font-weight:600">${id||''}</td>
     <td>${badge(i.Problem)}</td>
@@ -553,7 +555,7 @@ function setupEvents() {
     const filtered = val === 'all' ? filteredPreIssues : filteredPreIssues.filter(t => t.Status === val);
     document.getElementById('dashTicketsBody').innerHTML = filtered.length ? filtered.map(t => {
       const sno = t['S.No'];
-      const isPriority = priorityPreIssues.has(sno);
+      const isPriority = priorityPreIssues.has(sno) || t.Priority === 'Yes';
       return `<tr class="${isPriority ? 'row-priority' : ''}">
       <td style="color:var(--text-accent);font-weight:600">${sno||''}</td>
       <td>${t['Agent No.']||'—'}</td>
